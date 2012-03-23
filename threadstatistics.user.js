@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        4chan thread statistics
-// @version     1.0
+// @version     2.0
 // @namespace   anon.4chan.org
 // @description Adds thread statistics.
 // @include     http://boards.4chan.org/*/res/*
@@ -22,16 +22,16 @@
 		
 		if (month < 2 || 10 < month)
 			return false;
-		if ((2 < month && month < 10))
+		if (2 < month && month < 10)
 			return true;
 		
 		var sunday = date - day;
 		
-		if (month === 2)
+		if (month == 2)
 		{
 			if (sunday < 8)
 				return false;
-			if (sunday < 15 && day === 0)
+			if (sunday < 15 && day == 0)
 			{
 				if (hours < 7)
 					return false;
@@ -43,7 +43,7 @@
 		if (sunday < 1)
 			return true;
 		
-		if (sunday < 8 && day === 0)
+		if (sunday < 8 && day == 0)
 		{
 			if (hours < 6)
 				return true;
@@ -52,12 +52,45 @@
 		return false;
 	}
 	
-	var chanOffset = 5 - new Date().getTimezoneOffset() / 60 - (isDST() ? 1 : 0);
-	var statistics = document.createElement("div");
+	function formatNum(num)
+	{
+		return String(num).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+	}
+	
+	function formatTime(time)
+	{
+		var days = Math.floor(time / 86400000);
+		var dayss = days == 1 ? "" : "s";
+		time -= days * 86400000;
+		var hours = Math.floor(time / 3600000);
+		var hourss = hours == 1 ? "" : "s";
+		time -= hours * 3600000;
+		var minutes = Math.floor(time / 60000);
+		var minutess = minutes == 1 ? "" : "s";
+		time -= minutes * 60000;
+		var seconds = Math.floor(time / 1000);
+		var secondss = seconds == 1 ? "" : "s";
+		
+		if (days)
+			return days + " day" + dayss + ", " + hours + " hour" + hourss + ", " + minutes + " minute" + minutess + " and " + seconds + " second" + secondss;
+		else if (hours)
+			return hours + " hour" + hourss + ", " + minutes + " minute" + minutess + " and " + seconds + " second" + secondss;
+		else if (minutes)
+			return minutes + " minute" + minutess + " and " + seconds + " second" + secondss;
+		else
+			return seconds + " second" + secondss;
+	}
+	
 	var posts = [];
 	var postsSparse = [];
-	var creationDate = 0;
-	var opId = 0;
+	
+	var statistics = document.createElement("div");
+	
+	var chanOffset = 5 - new Date().getTimezoneOffset() / 60 - (isDST() ? 1 : 0);
+	
+	var op;
+	var last10;
+	var last;
 	var board = document.location.href.match(/^https?:\/\/boards.4chan.org(\/[^\/]+\/)/)[1];
 	var appended = false;
 	var prevDate = 0;
@@ -65,104 +98,139 @@
 	statistics.style.textAlign = "center";
 	statistics.style.fontSize = "7pt";
 	
-	statistics.appendChild(document.createElement("br"));
-	
 	function makeLabel(title)
 	{
 		var b = document.createElement("b");
 		var text = document.createTextNode("");
-		b.appendChild(document.createTextNode(title + ": "));
+		b.appendChild(document.createTextNode(" " + title + ": "));
 		statistics.appendChild(b);
 		statistics.appendChild(text);
-		statistics.appendChild(document.createElement("br"));
 		
 		return text;
 	}
 	
 	var threadAge = makeLabel("Thread age");
+	statistics.appendChild(document.createElement("br"));
 	var boardPosts = makeLabel("Posts in " + board);
+	var boardPosts10 = makeLabel("last 10 mins");
+	statistics.appendChild(document.createElement("br"));
 	var threadPosts = makeLabel("Posts in thread");
-	var boardPPM = makeLabel(board + " posts per minute");
-	var threadPPM = makeLabel("Thread posts per minute");
+	var threadPosts10 = makeLabel("last 10 mins");
+	statistics.appendChild(document.createElement("br"));
+	var boardPPM = makeLabel(board + " posts per min");
+	var boardPPM10 = makeLabel("last 10 mins");
+	statistics.appendChild(document.createElement("br"));
+	var threadPPM = makeLabel("Thread posts per min");
+	var threadPPM10 = makeLabel("last 10 mins");
 	
 	function updatePosts(target)
 	{
-		if (!creationDate)
-			creationDate = parseInt(document.querySelector("img[md5]");
+		if (!target.querySelectorAll)
+			return;
 		
-		if (target.querySelectorAll)
-			Array.prototype.forEach.call(target.querySelectorAll("td.reply, div.op"), function(elem) {
-				var id = parseInt(elem.getAttribute("id"));
-				var postDate;
-				var datetime;
-				var img;
-				
-				if (img = elem.querySelector("img[md5]"))
-					postDate = img.getAttribute("src").match(/\d{13}/)[0]);
-				else if (datetime = elem.querySelectorAll("span.datetime"))
-				{
-					var m = datetime.textContent.match(/(\d+)\/(\d+)\/(\d+)\(\w+\)(\d+):(\d+)/);
-					postDate = new Date(m[3]*0 + 2000, m[1], m[2], m[5], m[6]).getTime();
-					postDate += 3600 * chanOffset;
-				}
-				else
-					postDate = prevDate + 1;
-				
-				prevDate = postDate;
-				
-				if (!postsSparse[id])
-					posts.push(postsSparse[id] = {
-						date: postDate,
-						id: id,
-					});
+		var newPosts = false;
+		
+		Array.prototype.forEach.call(target.querySelectorAll("td.reply, div.op"), function(elem) {
+			newPosts = true;
+			
+			var id = elem.getAttribute("id");
+			var postDate;
+			var time;
+			var img;
+			
+			if (!id || isNaN(id = parseInt(id)) || postsSparse[id])
+				return;
+			
+			if (img = elem.querySelector("img[md5]"))
+				postDate = img.parentNode.getAttribute("href").match(/\d{13}/)[0]*1;
+			else if ((time = elem.querySelector("time")) && time.hasAttribute("datetime"))
+				postDate = new Date(time.getAttribute("datetime")).getTime();
+			else if (time = elem.querySelector("span.posttime"))
+			{
+				var m = time.textContent.match(/(\d+)\/(\d+)\/(\d+)\(\w+\)(\d+):(\d+)/);
+				postDate = new Date(m[3]*1 + 2000, m[1]*1 - 1, m[2], m[4], m[5], 0).getTime();
+				postDate += 3600000 * chanOffset;
+			}
+			else
+				postDate = prevDate + 1;
+			
+			if (postDate < prevDate)
+				postDate = prevDate + 1;
+			
+			prevDate = postDate;
+			
+			posts.push(postsSparse[id] = {
+				date: postDate,
+				seq: posts.length,
+				id: id,
 			});
+		});
 		
-		if (posts.length)
-			opId = posts[0];
-		
-		threadPosts.data = String(posts.length).replace(/\B(?=(\d{3})+(?!\d))/g, ",") +
-			" (" + (posts.length / (posts[posts.length - 1] - opId) * 100).toFixed(2) + "%)";
-		boardPosts.data = String(posts[posts.length - 1] - opId).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-		
-		if (!appended && document.getElementById("footer"))
+		if (newPosts)
 		{
-			document.getElementById("footer").appendChild(statistics);
-			appended = true;
+			op = posts[0];
+			last = posts[posts.length - 1];
+			
+			var now = last.date - op.date;
+			
+			threadPosts.data = formatNum(posts.length) + " (" + (posts.length / (last.id - op.id) * 100).toFixed(2) + "%)";
+			boardPosts.data = formatNum(last.id - op.id);
+			boardPPM.data = ((last.id - op.id) / (now / 60000)).toFixed(2);
+			
+			updateLast10();
+			
+			if (!appended && document.getElementById("footer"))
+			{
+				appended = true;
+				
+				document.getElementById("footer").parentNode.appendChild(document.createElement("br"));
+				document.getElementById("footer").parentNode.appendChild(statistics);
+				
+				updateThreadAge();
+				setInterval(updateThreadAge, 1000);
+			}
 		}
 	}
 	
 	function updateThreadAge()
 	{
-		var now = Date.now() - creationDate;
+		var now = Date.now() - op.date;
+		threadAge.data = formatTime(now);
+		
 		threadPPM.data = (posts.length / (now / 60000)).toFixed(2);
-		boardPPM.data = ((posts[posts.length - 1] - opId) / (now / 60000)).toFixed(2);
 		
-		var days = Math.floor(now / 86400000);
-		var dayss = days == 1 ? "" : "s";
-		now -= days * 86400000;
-		var hours = Math.floor(now / 3600000);
-		var hourss = hours == 1 ? "" : "s";
-		now -= hours * 3600000;
-		var minutes = Math.floor(now / 60000);
-		var minutess = minutes == 1 ? "" : "s";
-		now -= minutes * 60000;
-		var seconds = Math.floor(now / 1000);
-		var secondss = seconds == 1 ? "" : "s";
-		var str;
-		
-		if (days)
-			str = days + " day" + dayss + ", " + hours + " hour" + hourss + ", " + minutes + " minute" + minutess + " and " + seconds + " second" + secondss;
-		else if (hours)
-			str = hours + " hour" + hourss + ", " + minutes + " minute" + minutess + " and " + seconds + " second" + secondss;
-		else if (minutes)
-			str = minutes + " minute" + minutess + " and " + seconds + " second" + secondss;
-		else
-			str = seconds + " second" + secondss;
-		
-		threadAge.data = str;
+		if (last10)
+			threadPPM10.data = ((posts.length - last10.seq) / Math.min(now / 60000, 10)).toFixed(2);
 	}
 	
-	setInterval(updateThreadAge, 1000);
+	function updateLast10()
+	{
+		var now = Date.now();
+		last10 = null;
+		
+		for (var i = 0; i < posts.length; i ++)
+			if (now - posts[i].date <= 600000)
+			{
+				last10 = posts[i];
+				break;
+			}
+		
+		if (last10)
+		{
+			now -= last10.date;
+			
+			threadPosts10.data = formatNum(posts.length - last10.seq) + " (" + ((posts.length - last10.seq) / (last.id - last10.id) * 100).toFixed(2) + "%)";
+			boardPosts10.data = formatNum(last.id - last10.id);
+			boardPPM10.data = ((last.id - last10.id) / (now / 60000)).toFixed(2);
+		}
+		else
+		{
+			threadPosts10.data = "0 (0%)";
+			boardPosts10.data = "?";
+			threadPPM10.data = "?";
+			boardPPM10.data = "?";
+		}
+	}
 	
 	document.addEventListener("DOMContentLoaded", updatePosts.bind(this, document));
 	document.addEventListener("DOMNodeInserted", function(e) {
@@ -170,5 +238,4 @@
 	});
 	
 	updatePosts(document);
-	updateThreadAge();
 })();
