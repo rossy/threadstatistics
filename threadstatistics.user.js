@@ -162,7 +162,7 @@
 			else
 				postDate = prevDate + 1;
 			
-			if (postDate < prevDate)
+			if (postDate <= prevDate)
 				postDate = prevDate + 1;
 			
 			prevDate = postDate;
