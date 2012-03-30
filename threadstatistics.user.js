@@ -125,7 +125,7 @@
 	statistics.appendChild(document.createElement("br"));
 	
 	var csv = document.createElement("a");
-	var csvData = "data:text/csv,ID,Date";
+	var csvData = "data:text/plain,ID,Date";
 	csv.setAttribute("href", csvData);
 	csv.setAttribute("target", "_blank");
 	csv.appendChild(document.createTextNode("csv"));
@@ -173,7 +173,7 @@
 				id: id,
 			});
 			
-			csvData += "%13%10" + id + "," + postDate;
+			csvData += "%0d%0a" + id + "," + postDate;
 			csv.setAttribute("href", csvData);
 		});
 		
