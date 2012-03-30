@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        4chan thread statistics
-// @version     2.0
+// @version     2.1
 // @namespace   anon.4chan.org
 // @description Adds thread statistics.
 // @include     http://boards.4chan.org/*/res/*
@@ -122,6 +122,14 @@
 	statistics.appendChild(document.createElement("br"));
 	var threadPPM = makeLabel("Thread posts per min");
 	var threadPPM10 = makeLabel("last 10 mins");
+	statistics.appendChild(document.createElement("br"));
+	
+	var csv = document.createElement("a");
+	var csvData = "data:text/csv,ID,Date";
+	csv.setAttribute("href", csvData);
+	csv.setAttribute("target", "_blank");
+	csv.appendChild(document.createTextNode("csv"));
+	statistics.appendChild(csv);
 	
 	function updatePosts(target)
 	{
@@ -164,6 +172,9 @@
 				seq: posts.length,
 				id: id,
 			});
+			
+			csvData += "%13%10" + id + "," + postDate;
+			csv.setAttribute("href", csvData);
 		});
 		
 		if (newPosts)
@@ -227,7 +238,7 @@
 		{
 			threadPosts10.data = "0 (0%)";
 			boardPosts10.data = "?";
-			threadPPM10.data = "?";
+			threadPPM10.data = "0";
 			boardPPM10.data = "?";
 		}
 	}
