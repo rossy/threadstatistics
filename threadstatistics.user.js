@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        4chan thread statistics
-// @version     2.1
+// @version     3.0
 // @namespace   anon.4chan.org
 // @description Adds thread statistics.
 // @include     http://boards.4chan.org/*/res/*
@@ -11,92 +11,46 @@
 (function() {
 	"use strict";
 	
-	function isDST()
+	function formatNumber(num)
 	{
-		// From 4chan X
-		var D = new Date();
-		var date = D.getUTCDate();
-		var day = D.getUTCDay();
-		var hours = D.getUTCHours();
-		var month = D.getUTCMonth();
-		
-		if (month < 2 || 10 < month)
-			return false;
-		if (2 < month && month < 10)
-			return true;
-		
-		var sunday = date - day;
-		
-		if (month == 2)
-		{
-			if (sunday < 8)
-				return false;
-			if (sunday < 15 && day == 0)
-			{
-				if (hours < 7)
-					return false;
-				return true;
-			}
-			return true;
-		}
-		
-		if (sunday < 1)
-			return true;
-		
-		if (sunday < 8 && day == 0)
-		{
-			if (hours < 6)
-				return true;
-			return false;
-		}
-		return false;
-	}
-	
-	function formatNum(num)
-	{
-		return String(num).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+		return String(num).replace(/\B(?=(?:\d{3})+(?!\d))/g, " ");
 	}
 	
 	function formatTime(time)
 	{
-		var days = Math.floor(time / 86400000);
-		var dayss = days == 1 ? "" : "s";
-		time -= days * 86400000;
-		var hours = Math.floor(time / 3600000);
-		var hourss = hours == 1 ? "" : "s";
-		time -= hours * 3600000;
-		var minutes = Math.floor(time / 60000);
-		var minutess = minutes == 1 ? "" : "s";
-		time -= minutes * 60000;
-		var seconds = Math.floor(time / 1000);
-		var secondss = seconds == 1 ? "" : "s";
+		var days = Math.floor(time / 86400000),
+			daysS = days == 1 ? "" : "s";
+		
+		var hours = Math.floor((time -= days * 86400000) / 3600000),
+			hoursS = hours == 1 ? "" : "s";
+		
+		var minutes = Math.floor((time -= hours * 3600000) / 60000),
+			minutesS = minutes == 1 ? "" : "s";
+		
+		var seconds = Math.floor((time -= minutes * 60000) / 1000),
+			secondsS = seconds == 1 ? "" : "s";
 		
 		if (days)
-			return days + " day" + dayss + ", " + hours + " hour" + hourss + ", " + minutes + " minute" + minutess + " and " + seconds + " second" + secondss;
+			return days + " day" + daysS + ", " + hours + " hour" + hoursS + ", " + minutes + " minute" + minutesS + " and " + seconds + " second" + secondsS;
 		else if (hours)
-			return hours + " hour" + hourss + ", " + minutes + " minute" + minutess + " and " + seconds + " second" + secondss;
+			return hours + " hour" + hoursS + ", " + minutes + " minute" + minutesS + " and " + seconds + " second" + secondsS;
 		else if (minutes)
-			return minutes + " minute" + minutess + " and " + seconds + " second" + secondss;
+			return minutes + " minute" + minutesS + " and " + seconds + " second" + secondsS;
 		else
-			return seconds + " second" + secondss;
+			return seconds + " second" + secondsS;
 	}
 	
-	var posts = [];
-	var postsSparse = [];
+	var posts = [],
+		postsSparse = [],
+		op, last, last10,
+		appended = false,
+		board = document.location.href.match(/^https?:\/\/boards.4chan.org(\/[^\/]+\/)/)[1];
 	
 	var statistics = document.createElement("div");
-	
-	var chanOffset = 5 - new Date().getTimezoneOffset() / 60 - (isDST() ? 1 : 0);
-	
-	var op;
-	var last10;
-	var last;
-	var board = document.location.href.match(/^https?:\/\/boards.4chan.org(\/[^\/]+\/)/)[1];
-	var appended = false;
-	var prevDate = 0;
-	
+	statistics.className = "threadstatisticstext";
 	statistics.style.textAlign = "center";
-	statistics.style.fontSize = "7pt";
+	statistics.style.fontSize = "xx-small";
+	statistics.style.paddingBottom = "4px";
 	
 	function makeLabel(title)
 	{
@@ -111,21 +65,25 @@
 	
 	var threadAge = makeLabel("Thread age");
 	statistics.appendChild(document.createElement("br"));
-	var boardPosts = makeLabel("Posts in " + board);
-	var boardPosts10 = makeLabel("last 10 mins");
-	statistics.appendChild(document.createElement("br"));
-	var threadPosts = makeLabel("Posts in thread");
-	var threadPosts10 = makeLabel("last 10 mins");
-	statistics.appendChild(document.createElement("br"));
-	var boardPPM = makeLabel(board + " posts per min");
-	var boardPPM10 = makeLabel("last 10 mins");
-	statistics.appendChild(document.createElement("br"));
-	var threadPPM = makeLabel("Thread posts per min");
-	var threadPPM10 = makeLabel("last 10 mins");
+	
+	var boardPosts = makeLabel("Posts in " + board),
+		boardPosts10 = makeLabel("last 10 mins");
 	statistics.appendChild(document.createElement("br"));
 	
-	var csv = document.createElement("a");
-	var csvData = "data:text/plain,ID,Date";
+	var threadPosts = makeLabel("Posts in thread"),
+		threadPosts10 = makeLabel("last 10 mins");
+	statistics.appendChild(document.createElement("br"));
+	
+	var boardPPM = makeLabel(board + " posts per min"),
+		boardPPM10 = makeLabel("last 10 mins");
+	statistics.appendChild(document.createElement("br"));
+	
+	var threadPPM = makeLabel("Thread posts per min"),
+		threadPPM10 = makeLabel("last 10 mins");
+	statistics.appendChild(document.createElement("br"));
+	
+	var csv = document.createElement("a"),
+		csvData = "data:text/plain,ID,Date";
 	csv.setAttribute("href", csvData);
 	csv.setAttribute("target", "_blank");
 	csv.appendChild(document.createTextNode("csv"));
@@ -133,113 +91,130 @@
 	
 	function updatePosts(target)
 	{
+		var newPosts = false;
+		
 		if (!target.querySelectorAll)
 			return;
 		
-		var newPosts = false;
-		
-		Array.prototype.forEach.call(target.querySelectorAll("td.reply, div.op"), function(elem) {
-			newPosts = true;
+		for (var i = 0, query = target.querySelectorAll("div.thread > div.postContainer > div.post > div.postInfo[id^=pi] > span.dateTime[data-utc]"),
+			length = query.length, elem; i < length && (elem = query[i]); i ++)
+		{
+			var id = Number(elem.parentNode.getAttribute("id").substr(2)),
+				time = Number(elem.getAttribute("data-utc")) * 1000;
 			
-			var id = elem.getAttribute("id");
-			var postDate;
-			var time;
-			var img;
-			
-			if (!id || isNaN(id = parseInt(id)) || postsSparse[id])
-				return;
-			
-			if (img = elem.querySelector("img[md5]"))
-				postDate = img.parentNode.getAttribute("href").match(/\d{13}/)[0]*1;
-			else if ((time = elem.querySelector("time")) && time.hasAttribute("datetime"))
-				postDate = new Date(time.getAttribute("datetime")).getTime();
-			else if (time = elem.querySelector("span.posttime"))
+			if (id && time && !postsSparse[id])
 			{
-				var m = time.textContent.match(/(\d+)\/(\d+)\/(\d+)\(\w+\)(\d+):(\d+)/);
-				postDate = new Date(m[3]*1 + 2000, m[1]*1 - 1, m[2], m[4], m[5], 0).getTime();
-				postDate += 3600000 * chanOffset;
+				newPosts = true;
+				
+				posts.push(postsSparse[id] = {
+					id: id,
+					time: time,
+					seq: posts.length,
+				});
+				
+				csvData += "%0d%0a" + id + "," + time;
 			}
-			else
-				postDate = prevDate + 1;
-			
-			if (postDate <= prevDate)
-				postDate = prevDate + 1;
-			
-			prevDate = postDate;
-			
-			posts.push(postsSparse[id] = {
-				date: postDate,
-				seq: posts.length,
-				id: id,
-			});
-			
-			csvData += "%0d%0a" + id + "," + postDate;
-			csv.setAttribute("href", csvData);
-		});
+		}
 		
 		if (newPosts)
 		{
+			csv.setAttribute("href", csvData);
+			
 			op = posts[0];
 			last = posts[posts.length - 1];
 			
-			var now = last.date - op.date;
-			
-			threadPosts.data = formatNum(posts.length) + " (" + (posts.length / (last.id - op.id) * 100).toFixed(2) + "%)";
-			boardPosts.data = formatNum(last.id - op.id);
-			boardPPM.data = ((last.id - op.id) / (now / 60000)).toFixed(2);
+			if (last == op)
+			{
+				threadPosts.data = "1 (?%)";
+				boardPosts.data = "?";
+				threadPPM.data = "?";
+				boardPPM.data = "?";
+			}
+			else
+			{
+				var dTime = last.time - op.time;
+				var dId = last.id - op.id;
+				
+				threadPosts.data = formatNumber(posts.length) + " (" + (posts.length / dId * 100).toFixed(2) + "%)";
+				boardPosts.data = formatNumber(dId);
+				boardPPM.data = (dId / (dTime / 60000)).toFixed(2);
+			}
 			
 			updateLast10();
 			
-			if (!appended && document.getElementById("footer"))
+			if (!appended && document.querySelector("div#bottom"))
 			{
 				appended = true;
 				
-				document.getElementById("footer").parentNode.appendChild(document.createElement("br"));
-				document.getElementById("footer").parentNode.appendChild(statistics);
+				var bottom = document.querySelector("div#bottom");
+				bottom.parentNode.insertBefore(statistics, bottom);
 				
 				updateThreadAge();
 				setInterval(updateThreadAge, 1000);
+				setInterval(updateLast10, 30000);
 			}
 		}
 	}
 	
 	function updateThreadAge()
 	{
-		var now = Date.now() - op.date;
-		threadAge.data = formatTime(now);
+		var dTime = Math.max(Date.now() - op.time, 0);
 		
-		threadPPM.data = (posts.length / (now / 60000)).toFixed(2);
+		threadAge.data = formatTime(dTime);
+		
+		if (last != op)
+			threadPPM.data = (posts.length / (dTime / 60000)).toFixed(2);
 		
 		if (last10)
-			threadPPM10.data = ((posts.length - last10.seq) / Math.min(now / 60000, 10)).toFixed(2);
+			threadPPM10.data = ((posts.length - last10.seq) / Math.min(dTime / 60000, 10)).toFixed(2);
 	}
 	
 	function updateLast10()
 	{
-		var now = Date.now();
+		var now = Math.max(Date.now(), last ? last.time : 0);
 		last10 = null;
 		
-		for (var i = 0; i < posts.length; i ++)
-			if (now - posts[i].date <= 600000)
+		for (var i = 0, max = posts.length; i < max; i ++)
+			if (now - posts[i].time <= 600000)
 			{
 				last10 = posts[i];
 				break;
 			}
 		
-		if (last10)
-		{
-			now -= last10.date;
-			
-			threadPosts10.data = formatNum(posts.length - last10.seq) + " (" + ((posts.length - last10.seq) / (last.id - last10.id) * 100).toFixed(2) + "%)";
-			boardPosts10.data = formatNum(last.id - last10.id);
-			boardPPM10.data = ((last.id - last10.id) / (now / 60000)).toFixed(2);
-		}
-		else
+		if (!last10)
 		{
 			threadPosts10.data = "0 (0%)";
 			boardPosts10.data = "?";
 			threadPPM10.data = "0";
 			boardPPM10.data = "?";
+		}
+		else if (last10 == last == op)
+		{
+			threadPosts10.data = "1 (?%)";
+			boardPosts10.data = "?";
+			threadPPM10.data = "?";
+			boardPPM10.data = "?";
+			
+			last10 = null;
+		}
+		else if (last10 == last)
+		{
+			threadPosts10.data = "1 (?%)";
+			boardPosts10.data = "?";
+			threadPPM10.data = "0.10";
+			boardPPM10.data = "?";
+			
+			last10 = null;
+		}
+		else
+		{
+			var dTime = last.time - last10.time;
+			var dId = last.id - last10.id;
+			var dSeq = posts.length - last10.seq;
+			
+			threadPosts10.data = formatNumber(dSeq) + " (" + (dSeq / dId * 100).toFixed(2) + "%)";
+			boardPosts10.data = formatNumber(dId);
+			boardPPM10.data = (dId / (dTime / 60000)).toFixed(2);
 		}
 	}
 	
