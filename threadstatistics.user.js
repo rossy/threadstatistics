@@ -151,7 +151,7 @@
 				
 				updateThreadAge();
 				setInterval(updateThreadAge, 1000);
-				setInterval(updateLast10, 30000);
+				setInterval(updateLast10, 10000);
 			}
 		}
 	}
