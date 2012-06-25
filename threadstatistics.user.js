@@ -48,9 +48,7 @@
 	
 	var statistics = document.createElement("div");
 	statistics.className = "threadstatisticstext";
-	statistics.style.textAlign = "center";
-	statistics.style.fontSize = "xx-small";
-	statistics.style.paddingBottom = "4px";
+	statistics.setAttribute("style", "text-align:  center; font-size: xx-small; padding-bottom: 4px;");
 	
 	function makeLabel(title)
 	{
