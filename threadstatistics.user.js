@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        4chan thread statistics
-// @version     3.0
+// @version     3.1
 // @namespace   anon.4chan.org
 // @description Adds thread statistics.
 // @include     http://boards.4chan.org/*/thread/*
