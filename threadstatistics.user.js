@@ -3,8 +3,8 @@
 // @version     3.0
 // @namespace   anon.4chan.org
 // @description Adds thread statistics.
-// @include     http://boards.4chan.org/*/res/*
-// @include     https://boards.4chan.org/*/res/*
+// @include     http://boards.4chan.org/*/thread/*
+// @include     https://boards.4chan.org/*/thread/*
 // @run-at      document-start
 // ==/UserScript==
 
